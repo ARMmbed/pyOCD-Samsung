@@ -100,8 +100,8 @@ FLASH_ALGO = { 'load_address' : 0x406f4000,
                'analyzer_address' : 0x00000000,
 
                # Flash information
-			   'flash_start': 0x200000,
-			   'flash_size': 0x800000,
+			   'flash_start': 0x406f4000,
+			   'flash_size': 0x00100000,
 			   'sector_sizes': (
 					   (0x0, 0x10000),
 			  )
