@@ -121,16 +121,16 @@ class S5JS100(CoreSightTarget):
     def create_init_sequence(self):
         seq = super(S5JS100, self).create_init_sequence()
         LOG.info("S5JS100.create_init_sequence c")
-        seq.insert_before('find_aps',
+        seq.replace_task('find_aps', self.find_aps)
+        # after creating ap, we fix rom addr
+        seq.insert_before('init_ap_roms',
             ('fixup_ap_base_addrs', self._fixup_ap_base_addrs),
             )
-        seq.replace_task('find_aps', self.find_aps)
-        #seq.replace_task('create_cores', self.create_s5js100_core)
         return seq
 
     def _fixup_ap_base_addrs(self):
         LOG.info("S5JS100._fixup_ap_base_addrs c")
-        self.dp.aps[self.AP_NUM].addr = 0xe00fe000
+        self.dp.aps[self.AP_NUM].rom_addr = 0xe00fe000
         # fix other APs here…
 
     def find_aps(self):
