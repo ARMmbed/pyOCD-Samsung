@@ -15,12 +15,16 @@
 # limitations under the License.
 
 import logging
+from time import sleep
 from ...flash.flash import Flash
 from ...core.coresight_target import CoreSightTarget
-from ...core.memory_map import (FlashRegion, RamRegion, MemoryMap)
+from ...coresight import (ap, dap)
+from ...core.memory_map import (RomRegion, FlashRegion, RamRegion, MemoryMap)
 from ...core.target import Target
 from ...coresight.cortex_m import CortexM
 from ...debug.svd.loader import SVDFile
+from ...core import exceptions
+from ...utility.timeout import Timeout
 
 LOG = logging.getLogger(__name__)
 
@@ -63,30 +67,32 @@ flash_algo = {
     0x8f4ff3bf, 0xf3bf4770, 0xf3bf8f6f, 0x20008f4f, 0xf1004601, 0x1d0022e0, 0x1100f8c2, 0xdbf82820,
     0x8f6ff3bf, 0x8f4ff3bf, 0x00004770, 0x83015000, 0x6c756e28, 0x0000296c, 0x82021000, 0x85020000,
     0x8660061a, 0xc1900d01, 0x01000001, 0x82000a04, 0x83000a00, 0x85000a00, 0x85024000, 0xc1900d11,
-    0xe000ef50, 0x00040200, 0xe000ed14, 0x20e0f04f, 0xf8402100, 0x4aac1f10, 0x7100f04f, 0x17516011,
-    0x1170f8c0, 0x1174f8c0, 0x1270f8c0, 0x1274f8c0, 0x4ba64770, 0xf0406818, 0x60180002, 0x680849a4,
-    0x0001f040, 0x49a36008, 0xf0406808, 0x60080001, 0xf8d149a1, 0xb1780118, 0xf8c12200, 0x200f2100,
+    0xe000ef50, 0x00040200, 0xe000ed14, 0x20e0f04f, 0xf8402100, 0x4ab41f10, 0x7100f04f, 0x17516011,
+    0x1170f8c0, 0x1174f8c0, 0x1270f8c0, 0x1274f8c0, 0x4bae4770, 0xf0406818, 0x60180002, 0x680849ac,
+    0x0001f040, 0x49ab6008, 0xf0406808, 0x60080001, 0xf8d149a9, 0xb1780118, 0xf8c12200, 0x200f2100,
     0x0104f8c1, 0x0108f8d1, 0xd1fb280f, 0x2104f8c1, 0x0108f8d1, 0xd1fb2800, 0x20002264, 0x42901c40,
     0xf8d1dbfc, 0xf0200110, 0xf8c10003, 0xf8d10110, 0xf0200118, 0xf8c10003, 0xf8d10118, 0xf0200114,
-    0xf8c10003, 0x68180114, 0x0002f020, 0x47706018, 0x2000498a, 0x47706008, 0x45f0e92d, 0xf04f4887,
-    0xf8c00c00, 0xf7ffc000, 0xf3bfff24, 0xf3bf8f6f, 0x48838f4f, 0xc000f8c0, 0x8f6ff3bf, 0x8f4ff3bf,
-    0x48804981, 0xf3bf6008, 0xf3bf8f6f, 0xf04f8f4f, 0xf3bf20e0, 0xf3bf8f6f, 0xf8c08f4f, 0x4a72c010,
-    0x7100f04f, 0x17516011, 0x1180f8c0, 0x1184f8c0, 0x1280f8c0, 0x1284f8c0, 0x8f6ff3bf, 0x8f4ff3bf,
-    0xf1002000, 0x1d0021e0, 0xc100f8c1, 0xdbf82820, 0x8f6ff3bf, 0x8f4ff3bf, 0xff7bf7ff, 0x81b0f8df,
-    0x486a2201, 0xf8c84b6b, 0xf2472038, 0xf8c03101, 0xf8c3c0c4, 0xf8c31130, 0xe9c01134, 0x26032c02,
-    0xe9c02406, 0xe9c04c04, 0xf243c206, 0xf04f3785, 0xe9c04502, 0xf8d56700, 0xf0155100, 0xf04f4f00,
-    0xbf190504, 0x6aa1f44f, 0xa20ae9c0, 0x0aa8f04f, 0xa50ae9c0, 0x0a07f04f, 0xc038f8c0, 0x20c4f8c0,
-    0x2038f8c8, 0xc0c4f8c0, 0x1130f8c3, 0x1134f8c3, 0x60476006, 0x2121f240, 0xf8c06081, 0x6104c00c,
-    0xc014f8c0, 0xc018f8c0, 0x216a61c2, 0x62c46281, 0x63456305, 0xc03cf8c0, 0xa008f8c0, 0x20002164,
-    0x42881c40, 0xf44fdbfc, 0x671840c6, 0x67986758, 0xf8c367d8, 0xf8c30080, 0x483f0084, 0x6041493f,
-    0x2c1de9c0, 0x20002164, 0x42881c40, 0x2000dbfc, 0x85f0e8bd, 0xb5104938, 0x60484839, 0xf7ffa039,
-    0x2000fdb1, 0xb510bd10, 0xf7ffa038, 0x4932fdab, 0x60484832, 0xf7ffa038, 0x2000fda5, 0xb570bd10,
-    0x46054c2d, 0x6060482d, 0x46296862, 0xf7ffa034, 0xf894fd99, 0xf01220dc, 0xd1fa0f01, 0x4080f1a5,
-    0x20ff6120, 0x005ef884, 0x00dcf894, 0x0f01f010, 0x4835d1fa, 0x68616060, 0xf7ffa034, 0x2000fd83,
-    0xe92dbd70, 0x4e1c41f0, 0x44a0f100, 0x4615481b, 0x6070460f, 0x460a6873, 0xa0314621, 0xfd72f7ff,
-    0xf0301cf8, 0xd0050003, 0x1b04f855, 0x1b04f844, 0xd1f91f00, 0x60704824, 0xa0246871, 0xfd62f7ff,
-    0xe8bd2000, 0x000081f0, 0xe000ed04, 0x82020460, 0x82020500, 0x82020520, 0x82020000, 0x83011000,
-    0xe000ef50, 0x00040200, 0xe000ed14, 0x83015000, 0x85041000, 0x82021000, 0x85020000, 0x8660061a,
+    0xf8c10003, 0x68180114, 0x0002f020, 0x47706018, 0x20004992, 0x47706008, 0x48904a8f, 0x61912102,
+    0x60012104, 0x60c12101, 0x62016101, 0x1147f240, 0x21ff6041, 0x47706081, 0x47f0e92d, 0x24004887,
+    0xf7ff6004, 0xf3bfff16, 0xf3bf8f6f, 0x48848f4f, 0xf3bf6004, 0xf3bf8f6f, 0x49838f4f, 0x60084881,
+    0x8f6ff3bf, 0x8f4ff3bf, 0x20e0f04f, 0x8f6ff3bf, 0x8f4ff3bf, 0x4f10f840, 0xf04f4a73, 0x60117100,
+    0xf8c01751, 0xf8c01170, 0xf8c01174, 0xf8c01270, 0xf3bf1274, 0xf3bf8f6f, 0x20008f4f, 0x21e0f100,
+    0xf8c11d00, 0x28204100, 0xf3bfdbf8, 0xf3bf8f6f, 0xf7ff8f4f, 0xf8dfff6e, 0x260181b8, 0x4d6d486b,
+    0x6038f8c8, 0x3101f247, 0x40c4f8c0, 0x1130f8c5, 0x0c03f04f, 0x1134f8c5, 0xf8c02206, 0xe9c0c000,
+    0xf2434203, 0x61443785, 0x7601e9c0, 0x4606e9c0, 0x4302f04f, 0x3100f8d3, 0x4f00f013, 0x0304f04f,
+    0xf44fbf19, 0xe9c06aa1, 0xf04fa60a, 0xe9c00aa8, 0xf04fa30a, 0xf8c00a07, 0x638460c4, 0x6038f8c8,
+    0x40c4f8c0, 0x1130f8c5, 0x1134f8c5, 0xc000f8c0, 0xf2406047, 0x60812121, 0x610260c4, 0x61846144,
+    0x216a61c6, 0x62c26281, 0x63436303, 0xf8c063c4, 0x2164a008, 0x1c402000, 0xdbfc4288, 0xf7ffa046,
+    0xf44ffdc1, 0x672840c6, 0x67a86768, 0xf8c567e8, 0xf8c50080, 0x48440084, 0x60414944, 0x641de9c0,
+    0x20002164, 0x42881c40, 0xa041dbfc, 0xfdaaf7ff, 0xe8bd2000, 0x493c87f0, 0x4841b510, 0xa0416048,
+    0xfda0f7ff, 0xbd102000, 0xa040b510, 0xfd9af7ff, 0x48364935, 0xa0406048, 0xfd94f7ff, 0xbd102000,
+    0x4c31b570, 0x48314605, 0x68626060, 0xa03c4629, 0xfd88f7ff, 0x20dcf894, 0x0f01f012, 0xf1a5d1fa,
+    0x61204080, 0xf88420ff, 0xf894005e, 0xf01000dc, 0xd1fa0f01, 0x6060483c, 0xa03c6861, 0xfd72f7ff,
+    0xbd702000, 0x41f0e92d, 0xf1004e1f, 0x481f44a0, 0x460f4615, 0x68736070, 0x4621460a, 0xf7ffa038,
+    0x1cf8fd61, 0x0003f030, 0xf855d005, 0xf8441b04, 0x1f001b04, 0x482cd1f9, 0x68716070, 0xf7ffa02b,
+    0x2000fd51, 0x81f0e8bd, 0xe000ed04, 0x82020460, 0x82020500, 0x82020520, 0x82020000, 0x83011000,
+    0xe000ef50, 0x00040200, 0xe000ed14, 0x83015000, 0x85041000, 0x82021000, 0x74696e49, 0x61747320,
+    0x2e2e7472, 0x00000a2e, 0x85020000, 0x8660061a, 0x74696e49, 0x6e6f6420, 0x2e2e2e65, 0x0000000a,
     0x0660860a, 0x6e696e55, 0x000a7469, 0x53415245, 0x48432045, 0x000a5049, 0x454e4f44, 0x0000000a,
     0x20337773, 0x53415245, 0x45532045, 0x524f5443, 0x7830202c, 0x202c7825, 0x73616c66, 0x78305b68,
     0x0a5d7825, 0x00000000, 0x0660061a, 0x656e6f64, 0x616c6620, 0x305b6873, 0x5d782578, 0x0000000a,
@@ -95,14 +101,14 @@ flash_algo = {
     ],
 
     # Relative function addresses
-    'pc_init': 0x001004f9,
-    'pc_unInit': 0x00100655,
-    'pc_program_page': 0x001006c3,
-    'pc_erase_sector': 0x0010067f,
-    'pc_eraseAll': 0x00100667,
+    'pc_init': 0x00100519,
+    'pc_unInit': 0x00100677,
+    'pc_program_page': 0x00100703,
+    'pc_erase_sector': 0x001006bf,
+    #'pc_eraseAll': 0x001006a7,
 
-    'static_base' : 0x00100000 + 0x00000020 + 0x000007a8,
-    'begin_stack' : 0x00100a00,
+    'static_base' : 0x00100000 + 0x00000020 + 0x00000808,
+    'begin_stack' : 0x00100b00,
     'begin_data' : 0x00100000 + 0x1000,
     'page_size' : 0x400,
     'analyzer_supported' : False,
@@ -117,103 +123,107 @@ flash_algo = {
         (0x0, 0x100000),
     )
 }
-           
+    
+class Flash_s5js100(Flash):
+
+    def __init__(self, target, flash_algo):
+        super(Flash_s5js100, self).__init__(target, flash_algo)
+        self._did_prepare_target = False
+        self.init()
+          
 class S5JS100(CoreSightTarget):
 
     VENDOR = "Samsung"
     AP_NUM = 0
     
     memoryMap = MemoryMap(
-        FlashRegion(    start=0x406f4000,  length=0x00100000,      blocksize=0x400, is_boot_memory=True,
-            algo=flash_algo),
+        FlashRegion(    start=0x406f4000,  length=0x00100000, page_size = 0x400,     blocksize=4096, is_boot_memory=True, algo=flash_algo),
+        #FlashRegion(    start=0x406f4000,  length=0x00100000,      blocksize=0x1000, is_boot_memory=True, algo=flash_algo, flash_class=Flash_s5js100),
         RamRegion(      start=0x00100000,  length=0x80000)
         )
 
     def __init__(self, link):
         super(S5JS100, self).__init__(link, self.memoryMap)
-        LOG.info("S5JS100.__init__ c")
         self.AP_NUM = 0 
 
     def create_init_sequence(self):
         seq = super(S5JS100, self).create_init_sequence()
-        LOG.info("S5JS100.create_init_sequence c")
         seq.replace_task('find_aps', self.find_aps)
         # after creating ap, we fix rom addr
         seq.insert_before('init_ap_roms',
             ('fixup_ap_base_addrs', self._fixup_ap_base_addrs),
             )
+        seq.replace_task('create_cores', self.create_s5js100_core)
         return seq
 
     def _fixup_ap_base_addrs(self):
-        LOG.info("S5JS100._fixup_ap_base_addrs c")
         self.dp.aps[self.AP_NUM].rom_addr = 0xe00fe000
         # fix other APs here…
 
     def find_aps(self):
-        LOG.info("S5JS100.find_aps c")
         if self.dp.valid_aps is not None:
             return
 
         self.dp.valid_aps = (self.AP_NUM,)
 
     def create_s5js100_core(self):
-        LOG.info("S5JS100.create_s5js100_core c")
         core = CortexM_S5JS100(self.session, self.aps[self.AP_NUM], self.memory_map, 0)
-        core.default_reset_type = self.ResetType.SW_SYSRESETREQ
+        core.default_reset_type = self.ResetType.SW
         self.aps[self.AP_NUM].core = core
         core.init()
         self.add_core(core)
 
 class CortexM_S5JS100(CortexM):
     def reset(self, reset_type=None):
-        LOG.info("Reset target...")
-        self.session.notify(Target.EVENT_PRE_RESET, self)
+        # Always use software reset for S5JS100 since the hardware version
+        # self.session.notify(Target.EVENT_PRE_RESET, self)
 
-        self._run_token += 1
+        self.write_memory(0x82020018, 0x1 << 1)
+        self.write_memory(0x83011000, 0x4 << 0)  #enable watchdog
+        self.write_memory(0x8301100c, 0x1 << 0)
+        self.write_memory(0x83011010, 0x1 << 0)
+        self.write_memory(0x83011020, 0x1 << 0)
+        self.write_memory(0x83011004, 327 << 0)  #set 10ms to be reset , 1 sec=32768
+        self.write_memory(0x83011008, 0xFF << 0) #force to load value to be reset
+        self.flush()
 
-        if reset_type is Target.ResetType.HW:
-            self.session.probe.reset()
-            self.reinit_dap()
-            self.fpb.enable()
-
-        else:
-            if reset_type is Target.ResetType.SW_VECTRESET:
-                mask = CortexM.NVIC_AIRCR_VECTRESET
-            else:
-                mask = CortexM.NVIC_AIRCR_SYSRESETREQ
-
-            try:
-                self.write_memory(CortexM.NVIC_AIRCR, CortexM.NVIC_AIRCR_VECTKEY | mask)
-                self.flush()
-            except exceptions.TransferError:
-                self.flush()
+        self.resume()
+        sleep(1.0)
+        LOG.info("S5JS100.reset c")
 
         with Timeout(5.0) as t_o:
             while t_o.check():
                 try:
-                    self._ap.dp.init()
-                    self._ap.dp.power_up_debug()
                     dhcsr_reg = self.read32(CortexM.DHCSR)
                     if (dhcsr_reg & CortexM.S_RESET_ST) == 0:
                         break
-                    self.flush()
                 except exceptions.TransferError:
+                    self.flush()
+                    self._ap.dp.init()
+                    self._ap.dp.power_up_debug()
                     sleep(0.01)
 
-        self.session.notify(Target.EVENT_POST_RESET, self)
-
-    def wait_halted(self):
-        LOG.info("Wait_halted target...")
-
-    def reinit_dap(self):
-        LOG.info("Reinit target...")
-
-    def acquire(self):
-        LOG.info("Acquiring target...")
+        # self.session.notify(Target.EVENT_POST_RESET, self)
 
     def reset_and_halt(self, reset_type=None):
-        LOG.info("Reset and Acquiring target...")
+        LOG.info("S5JS100.reset #1")
+        self.reset()
+        self.halt()
+        self.wait_halted()
 
-    def resume(self):
-        LOG.info("Resume target...")
+    def wait_halted(self):
+        with Timeout(5.0) as t_o:
+            while t_o.check():
+                try:
+                    if not self.is_running():
+                        break
+                except exceptions.TransferError:
+                    self.flush()
+                    sleep(0.01)
+            else:
+                raise Exception("Timeout waiting for target halt")
+
+    def disconnect(self, resume=True):
+        LOG.info("S5JS100.disconnect #1")
+        self.reset_and_halt()
 
