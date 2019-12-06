@@ -103,7 +103,7 @@ flash_algo = {
     'pc_unInit': 0x0010065b,
     'pc_program_page': 0x001006c9,
     'pc_erase_sector': 0x00100685,
-    #'pc_eraseAll': 0x0010066d,
+    'pc_eraseAll': 0x0010066d,
 
     'static_base' : 0x00100000 + 0x00000020 + 0x000007bc,
     'begin_stack' : 0x00100a00,
@@ -117,12 +117,28 @@ flash_algo = {
 }
     
 class Flash_s5js100(Flash):
-
     def __init__(self, target, flash_algo):
         super(Flash_s5js100, self).__init__(target, flash_algo)
         self._did_prepare_target = False
-        self.init()
-          
+        
+    def init(self, operation, address=None, clock=0, reset=True):
+        global is_flashing
+
+        if self._active_operation != operation and self._active_operation is not None:
+            self.uninit()
+            
+        is_flashing = True
+        super(Flash_s5js100, self).init(operation, address, clock, reset)
+        is_flashing = True
+
+    def uninit(self):
+        if self._active_operation is None:
+            return
+
+        global is_flashing
+        super(Flash_s5js100, self).uninit()
+        is_flashing = False
+
 class S5JS100(CoreSightTarget):
 
     VENDOR = "Samsung"
@@ -130,8 +146,8 @@ class S5JS100(CoreSightTarget):
     ROM_ADDR = 0xE00FE000
     
     memoryMap = MemoryMap(
-        FlashRegion(    start=0x406f4000,  length=0x00100000, page_size = 0x400,     blocksize=4096, is_boot_memory=True, algo=flash_algo),
-        #FlashRegion(    start=0x406f4000,  length=0x00100000,      blocksize=0x1000, is_boot_memory=True, algo=flash_algo, flash_class=Flash_s5js100),
+        #FlashRegion(    start=0x406f4000,  length=0x00100000, page_size = 0x400,     blocksize=4096, is_boot_memory=True, algo=flash_algo),
+        FlashRegion(    start=0x406f4000,  length=0x00100000, page_size = 0x400, blocksize=0x1000, is_boot_memory=True, algo=flash_algo, flash_class=Flash_s5js100),
         RamRegion(      start=0x00100000,  length=0x80000)
         )
 
@@ -177,11 +193,16 @@ class CortexM_S5JS100(CortexM):
         self.write_memory(0x83011020, 0x1 << 0)
         self.write_memory(0x83011004, 327 << 0)  #set 10ms to be reset , 1 sec=32768
         self.write_memory(0x83011008, 0xFF << 0) #force to load value to be reset
-        self.flush()
 
+        # Set SP and PC based on interrupt vector in PBL
+        sp = self.read_memory(0x00000000)
+        pc = self.read_memory(0x00000004)
+        self.write_core_register('sp', sp)
+        self.write_core_register('pc', pc)
+        self.flush()
         self.resume()
         sleep(1.0)
-        LOG.info("S5JS100.reset c")
+        #LOG.info("S5JS100.reset c")
 
         with Timeout(5.0) as t_o:
             while t_o.check():
@@ -214,7 +235,4 @@ class CortexM_S5JS100(CortexM):
             else:
                 raise Exception("Timeout waiting for target halt")
 
-#    def disconnect(self, resume=True):
-#        LOG.info("S5JS100.disconnect #1")
-#        self.reset_and_halt()
 
