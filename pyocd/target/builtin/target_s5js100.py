@@ -211,12 +211,14 @@ class CortexM_S5JS100(CortexM):
         if reset_type is Target.ResetType.HW:
             #LOG.info("s5js100 reset HW")
             self.S5JS100_reset_type = Target.ResetType.HW
+            #LOG.info("1. 0x83011004 : 0x%x", self.read_memory(0x83011004))
             self.write_memory(0x82020018, 0x1 << 1)
             self.write_memory(0x83011000, 0x4 << 0)  #enable watchdog
             self.write_memory(0x8301100c, 0x1 << 0)
             self.write_memory(0x83011010, 0x1 << 0)
             self.write_memory(0x83011020, 0x1 << 0)
-            self.write_memory(0x83011004, 327 << 0)  #set 10ms to be reset , 1 sec=32768
+            self.write_memory(0x83011800, 0x1 << 0) # clock gating disable
+            self.write_memory(0x83011004, 3270 << 0)  #set 100ms to be reset , 1 sec=32768
             self.write_memory(0x83011008, 0xFF << 0) #force to load value to be reset
             # Set SP and PC based on interrupt vector in PBL
             #self.write_memory(0x00000004, 0xE7FEE7FE)
@@ -236,7 +238,6 @@ class CortexM_S5JS100(CortexM):
                         dhcsr_reg = self.read32(CortexM.DHCSR)
                         if (dhcsr_reg & CortexM.S_RESET_ST) == 0:
                             break
-                        self.flush()
                     except exceptions.TransferError:
                         self.flush()
                         self._ap.dp.init()
@@ -265,6 +266,7 @@ class CortexM_S5JS100(CortexM):
         self.reset(self.ResetType.HW)
         self.halt()
         self.wait_halted()
+        #LOG.info("2. 0x83011004 : 0x%x", self.read_memory(0x83011004))
         # Set SP and PC based on interrupt vector in PBL
         #self.write_memory(0x00000004, 0xE7FEE7FE)
         pc = self.read_memory(0x40000004)
@@ -286,5 +288,53 @@ class CortexM_S5JS100(CortexM):
                     sleep(0.01)
             else:
                 raise Exception("Timeout waiting for target halt")
+
+    def resume(self):
+        """! @brief Resume execution of the core.
+        """
+        #LOG.info("s5js100.resume")
+        if self.get_state() != Target.TARGET_HALTED:
+            LOG.info('cannot resume: target not halted')
+            return
+        self.session.notify(Target.EVENT_PRE_RUN, self, Target.RUN_TYPE_RESUME)
+        self._run_token += 1
+        self.clear_debug_cause_bits()
+        self.write_memory(CortexM.DHCSR, CortexM.DBGKEY | CortexM.C_DEBUGEN)
+        self.flush()
+        self.session.notify(Target.EVENT_POST_RUN, self, Target.RUN_TYPE_RESUME)
+        #LOG.info("s5js100.resume done")
+
+    def get_state(self):
+        #LOG.info("s5js100.get_state")
+        try:
+            dhcsr = self.read_memory(CortexM.DHCSR)
+            #LOG.info("s5js100.get_state dhcsr 0x%x", dhcsr)
+        except exceptions.TransferError:
+            #LOG.info("s5js100.get_state read fail dhcsr..try more")
+            self._ap.dp.init()
+            self._ap.dp.power_up_debug()
+            self.halt()
+            self.wait_halted()
+            dhcsr = self.read_memory(CortexM.DHCSR)
+            #LOG.info("fail s5js100.get_state dhcsr 0x%x", dhcsr)
+
+        if dhcsr & CortexM.S_RESET_ST:
+            # Reset is a special case because the bit is sticky and really means
+            # "core was reset since last read of DHCSR". We have to re-read the
+            # DHCSR, check if S_RESET_ST is still set and make sure no instructions
+            # were executed by checking S_RETIRE_ST.
+            newDhcsr = self.read_memory(CortexM.DHCSR)
+            if (newDhcsr & CortexM.S_RESET_ST) and not (newDhcsr & CortexM.S_RETIRE_ST):
+                return Target.TARGET_RESET
+        if dhcsr & CortexM.S_LOCKUP:
+            return Target.TARGET_LOCKUP
+        elif dhcsr & CortexM.S_SLEEP:
+            return Target.TARGET_SLEEPING
+        elif dhcsr & CortexM.S_HALT:
+            return Target.TARGET_HALTED
+        else:
+            return Target.TARGET_RUNNING
+ 
+
 
 
