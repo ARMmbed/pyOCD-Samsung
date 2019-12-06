@@ -127,6 +127,7 @@ class S5JS100(CoreSightTarget):
 
     VENDOR = "Samsung"
     AP_NUM = 0
+    ROM_ADDR = 0xE00FE000
     
     memoryMap = MemoryMap(
         FlashRegion(    start=0x406f4000,  length=0x00100000, page_size = 0x400,     blocksize=4096, is_boot_memory=True, algo=flash_algo),
@@ -149,8 +150,7 @@ class S5JS100(CoreSightTarget):
         return seq
 
     def _fixup_ap_base_addrs(self):
-        self.dp.aps[self.AP_NUM].rom_addr = 0xe00fe000
-        # fix other APs here…
+        self.dp.aps[self.AP_NUM].rom_addr = self.ROM_ADDR
 
     def find_aps(self):
         if self.dp.valid_aps is not None:
