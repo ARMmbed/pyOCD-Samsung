@@ -202,7 +202,7 @@ class S5JS100(CoreSightTarget):
         self.add_core(core)
 
 class CortexM_S5JS100(CortexM):
-    S5JS100_reset_type = Target.ResetType.SW_VECTRESET
+    #S5JS100_reset_type = Target.ResetType.SW_VECTRESET
 
     def reset(self, reset_type=None):
         # Always use software reset for S5JS100 since the hardware version
@@ -230,6 +230,18 @@ class CortexM_S5JS100(CortexM):
             self.flush()
             self.resume()
             sleep(0.5)
+            with Timeout(5.0) as t_o:
+                while t_o.check():
+                    try:
+                        dhcsr_reg = self.read32(CortexM.DHCSR)
+                        if (dhcsr_reg & CortexM.S_RESET_ST) == 0:
+                            break
+                        self.flush()
+                    except exceptions.TransferError:
+                        self.flush()
+                        self._ap.dp.init()
+                        self._ap.dp.power_up_debug()
+                        sleep(0.01)
 
         else:
             if reset_type is Target.ResetType.SW_VECTRESET:
@@ -247,8 +259,10 @@ class CortexM_S5JS100(CortexM):
         self.session.notify(Target.EVENT_POST_RESET, self)
 
     def reset_and_halt(self, reset_type=None):
+        #LOG.info("reset_and_halt")
         #self.reset()
-        self.reset(self.ResetType.SW_SYSRESETREQ)
+        #self.reset(self.ResetType.SW_SYSRESETREQ)
+        self.reset(self.ResetType.HW)
         self.halt()
         self.wait_halted()
         # Set SP and PC based on interrupt vector in PBL
@@ -260,7 +274,6 @@ class CortexM_S5JS100(CortexM):
         self.write_core_register('pc', pc)
         #LOG.info("PC : 0x%x", self.read_core_register('pc'))
         #LOG.info("SP : 0x%x", self.read_core_register('sp'))
-        sleep(1.0)
 
     def wait_halted(self):
         with Timeout(5.0) as t_o:
