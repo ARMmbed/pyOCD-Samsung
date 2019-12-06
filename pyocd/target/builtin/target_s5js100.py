@@ -120,24 +120,35 @@ class Flash_s5js100(Flash):
     def __init__(self, target, flash_algo):
         super(Flash_s5js100, self).__init__(target, flash_algo)
         self._did_prepare_target = False
+        #LOG.info("S5JS100.Flash_s5js100.__init__ c")
         
     def init(self, operation, address=None, clock=0, reset=True):
+        #LOG.info("S5JS100.Flash_s5js100.init c")
         global is_flashing
 
         if self._active_operation != operation and self._active_operation is not None:
             self.uninit()
             
+        #self.target.reset(self.target.ResetType.HW)
+
         is_flashing = True
         super(Flash_s5js100, self).init(operation, address, clock, reset)
         is_flashing = True
 
     def uninit(self):
+        #LOG.info("S5JS100.Flash_s5js100.uninit c")
         if self._active_operation is None:
             return
 
         global is_flashing
         super(Flash_s5js100, self).uninit()
         is_flashing = False
+
+
+ERASE_ALL_WEIGHT = 140 # Time it takes to perform a chip erase
+ERASE_SECTOR_WEIGHT = 1 # Time it takes to erase a page
+PROGRAM_PAGE_WEIGHT = 1 # Time it takes to program a page (Not including data transfer time)
+ 
 
 class S5JS100(CoreSightTarget):
 
@@ -147,7 +158,16 @@ class S5JS100(CoreSightTarget):
     
     memoryMap = MemoryMap(
         #FlashRegion(    start=0x406f4000,  length=0x00100000, page_size = 0x400,     blocksize=4096, is_boot_memory=True, algo=flash_algo),
-        FlashRegion(    start=0x406f4000,  length=0x00100000, page_size = 0x400, blocksize=0x1000, is_boot_memory=True, algo=flash_algo, flash_class=Flash_s5js100),
+        #FlashRegion(    start=0x406f4000,  length=0x00100000, page_size = 0x400, blocksize=0x1000, is_boot_memory=True, algo=flash_algo, flash_class=Flash_s5js100),
+        FlashRegion(    start=0x406f4000,  length=0x00100000, 
+                    page_size = 0x400, blocksize=0x1000, 
+                    is_boot_memory=True, 
+                    erased_byte_value=0xFF, 
+                    algo=flash_algo, 
+                    erase_all_weight=ERASE_ALL_WEIGHT,
+                    erase_sector_weight=ERASE_SECTOR_WEIGHT,
+                    program_page_weight=PROGRAM_PAGE_WEIGHT,
+                    flash_class=Flash_s5js100),
         RamRegion(      start=0x00100000,  length=0x80000)
         )
 
@@ -182,46 +202,65 @@ class S5JS100(CoreSightTarget):
         self.add_core(core)
 
 class CortexM_S5JS100(CortexM):
+    S5JS100_reset_type = Target.ResetType.SW_VECTRESET
+
     def reset(self, reset_type=None):
         # Always use software reset for S5JS100 since the hardware version
         self.session.notify(Target.EVENT_PRE_RESET, self)
 
-        self.write_memory(0x82020018, 0x1 << 1)
-        self.write_memory(0x83011000, 0x4 << 0)  #enable watchdog
-        self.write_memory(0x8301100c, 0x1 << 0)
-        self.write_memory(0x83011010, 0x1 << 0)
-        self.write_memory(0x83011020, 0x1 << 0)
-        self.write_memory(0x83011004, 327 << 0)  #set 10ms to be reset , 1 sec=32768
-        self.write_memory(0x83011008, 0xFF << 0) #force to load value to be reset
+        if reset_type is Target.ResetType.HW:
+            #LOG.info("s5js100 reset HW")
+            self.S5JS100_reset_type = Target.ResetType.HW
+            self.write_memory(0x82020018, 0x1 << 1)
+            self.write_memory(0x83011000, 0x4 << 0)  #enable watchdog
+            self.write_memory(0x8301100c, 0x1 << 0)
+            self.write_memory(0x83011010, 0x1 << 0)
+            self.write_memory(0x83011020, 0x1 << 0)
+            self.write_memory(0x83011004, 327 << 0)  #set 10ms to be reset , 1 sec=32768
+            self.write_memory(0x83011008, 0xFF << 0) #force to load value to be reset
+            # Set SP and PC based on interrupt vector in PBL
+            #self.write_memory(0x00000004, 0xE7FEE7FE)
+            pc = self.read_memory(0x40000004)
+            sp = self.read_memory(0x40000000)
+            #self.write_core_register('sp', sp)
+            self.write_core_register('sp', sp)
+            self.write_core_register('pc', pc)
+            #LOG.info("PC : 0x%x", self.read_core_register('pc'))
+            #LOG.info("SP : 0x%x", self.read_core_register('sp'))
+            self.flush()
+            self.resume()
+            sleep(0.5)
 
-        # Set SP and PC based on interrupt vector in PBL
-        sp = self.read_memory(0x00000000)
-        pc = self.read_memory(0x00000004)
-        self.write_core_register('sp', sp)
-        self.write_core_register('pc', pc)
-        self.flush()
-        self.resume()
-        sleep(1.0)
-        #LOG.info("S5JS100.reset c")
+        else:
+            if reset_type is Target.ResetType.SW_VECTRESET:
+                mask = CortexM.NVIC_AIRCR_VECTRESET
+            else:
+                mask = CortexM.NVIC_AIRCR_SYSRESETREQ
 
-        with Timeout(5.0) as t_o:
-            while t_o.check():
-                try:
-                    dhcsr_reg = self.read32(CortexM.DHCSR)
-                    if (dhcsr_reg & CortexM.S_RESET_ST) == 0:
-                        break
-                except exceptions.TransferError:
-                    self.flush()
-                    self._ap.dp.init()
-                    self._ap.dp.power_up_debug()
-                    sleep(0.01)
+            #LOG.info("s5js100 reset SW")
+            try:
+                self.write_memory(CortexM.NVIC_AIRCR, CortexM.NVIC_AIRCR_VECTKEY | mask)
+                self.flush()
+            except exceptions.TransferError:
+                self.flush()
 
         self.session.notify(Target.EVENT_POST_RESET, self)
 
     def reset_and_halt(self, reset_type=None):
-        self.reset()
+        #self.reset()
+        self.reset(self.ResetType.SW_SYSRESETREQ)
         self.halt()
         self.wait_halted()
+        # Set SP and PC based on interrupt vector in PBL
+        #self.write_memory(0x00000004, 0xE7FEE7FE)
+        pc = self.read_memory(0x40000004)
+        sp = self.read_memory(0x40000000)
+        #self.write_core_register('sp', sp)
+        self.write_core_register('sp', sp)
+        self.write_core_register('pc', pc)
+        #LOG.info("PC : 0x%x", self.read_core_register('pc'))
+        #LOG.info("SP : 0x%x", self.read_core_register('sp'))
+        sleep(1.0)
 
     def wait_halted(self):
         with Timeout(5.0) as t_o:
