@@ -218,7 +218,7 @@ class CortexM_S5JS100(CortexM):
             self.write_memory(0x83011010, 0x1 << 0)
             self.write_memory(0x83011020, 0x1 << 0)
             self.write_memory(0x83011800, 0x1 << 0) # clock gating disable
-            self.write_memory(0x83011004, 3270 << 0)  #set 100ms to be reset , 1 sec=32768
+            self.write_memory(0x83011004, 32768 << 0)  #set 100ms to be reset , 1 sec=32768
             self.write_memory(0x83011008, 0xFF << 0) #force to load value to be reset
             # Set SP and PC based on interrupt vector in PBL
             #self.write_memory(0x00000004, 0xE7FEE7FE)
