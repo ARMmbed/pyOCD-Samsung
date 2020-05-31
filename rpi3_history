@@ -1,0 +1,72 @@
+137  git clone git@github.com:ARMmbed/pyOCD-Samsung.git
+  138  ssh-keygen
+  139  ls
+  140  cat ~/.ssh/id_rsa.pub
+  141  git clone git@github.com:ARMmbed/pyOCD-Samsung.git
+  142  ls
+  143  cd pyOCD-Samsung/
+  144  ls
+  145  cp /etc/apt/sources.list /etc/apt/sources.list_backup
+  146  sudo cp /etc/apt/sources.list /etc/apt/sources.list_backup
+  147  sudo vi /etc/apt/sources.list
+  148  sudo apt-get update
+  149  sudo apt-get install python3-pip
+  150  sudo vi /etc/apt/sources.list
+  151  sudo apt-get install python3-pip
+  152  sudo apt update
+  153  sudo apt-get install python3-pip
+  154  sudo vi /etc/apt/sources.list
+  155  sudo apt update
+  156  sudo apt-get install python3-pip
+  157  sudo apt-get install python3-setuptools
+  158  sudo add-apt-repository universe
+  159  sudo apt-get install -y python3-pip
+  160  sudo apt install python3-distutils
+  161  sudo apt-get install python-distutils-extra
+  162  sudo pip3 install pyocd
+  163  apt install python3.7-distutils
+  164  sudo apt install python3.7-distutils
+  165  ls
+  166  sudo cp /etc/apt/sources.list /etc/apt/sources.list_univ
+  167  sudo cp /etc/apt/sources.list_backup /etc/apt/sources.list
+  168  sudo apt install python3.7-distutils
+  169  sudo apt-get update
+  170  sudo pip3 install pyocd --no-deps
+  171  sudo apt install python3.7-distutils
+  172  sudo pip3 install pyocd --no-deps
+  173  sudo pip3 install pyserial
+  174  vi dev-requirements.txt
+  175  sudo pip3 install coverage
+  176  sudo apt-get install python3-setuptools
+  177  sudo pip3 install coverage
+  178  sudo pip3 install tox
+  179  ls
+  180  vi test/basic_test.py
+  181  sudo python3 test/basic_test.py
+  182  vi test/basic_test.py
+  183  sudo python3 test/basic_test.py
+  184  sudo pip3 install intelhex
+  185  sudo python3 test/basic_test.py
+  186  sudo pip3 install elftools
+  187  sudo pip3 install numpy
+  188  sudo apt-get install python3-dev
+  189  sudo pip3 install numpy
+  190  sudo pip3 install Cython
+  191  sudo pip3 install numpy
+  192  sudo pip3 install elftools
+  193  sudo pip3 install pyusb
+  194  sudo python3 test/basic_test.py
+  195  sudo pip3 install elftools
+  196  apt-get install -y python3-pyelftools python-pyelftools
+  197  sudo apt-get install -y python3-pyelftools python-pyelftools
+  198  sudo python3 test/basic_test.py
+  199  history
+  200  history > rpi3_install.history
+  201  git add rpi3_install.history
+  202  git commit -s
+  203  sudo python3 test/basic_test.py
+  204  sudo pip3 install intervaltree
+  205  sudo python3 test/basic_test.py
+  206  sudo pip3 install -U pyocd
+  207  hisotry
+  208  history
